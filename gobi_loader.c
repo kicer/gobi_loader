@@ -20,6 +20,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/* ChangeLog */
+
+/* 2013-11-06 <joykicer@gmail.com>
+ * Fix make magic words error when build in big-endian system
+ */
+
 #include <stdio.h>
 #include <string.h>
 #include <sys/types.h>
@@ -28,6 +34,51 @@
 #include <termios.h>
 #include <unistd.h>
 #include <malloc.h>
+#include <stdint.h>
+
+#if defined(BYTE_ORDER) && !defined(__BYTE_ORDER)
+#define __LITTLE_ENDIAN LITTLE_ENDIAN
+#define __BIG_ENDIAN BIG_ENDIAN
+#define __BYTE_ORDER BYTE_ORDER
+#endif
+
+#ifndef __BYTE_ORDER
+#error Unknown endian type
+#endif
+
+static inline uint16_t __swab16(uint16_t x)
+{
+	return x<<8 | x>>8;
+}
+
+static inline uint32_t __swab32(uint32_t x)
+{
+	return x<<24 | x>>24 |
+		(x & (uint32_t)0x0000ff00UL)<<8 |
+		(x & (uint32_t)0x00ff0000UL)>>8;
+}
+
+static inline uint64_t __swab64(uint64_t x)
+{
+	return x<<56 | x>>56 |
+		(x & (uint64_t)0x000000000000ff00ULL)<<40 |
+		(x & (uint64_t)0x0000000000ff0000ULL)<<24 |
+		(x & (uint64_t)0x00000000ff000000ULL)<< 8 |
+		(x & (uint64_t)0x000000ff00000000ULL)>> 8 |
+		(x & (uint64_t)0x0000ff0000000000ULL)>>24 |
+		(x & (uint64_t)0x00ff000000000000ULL)>>40;
+}
+
+
+#if __BYTE_ORDER == __BIG_ENDIAN
+#define SWAPL16(val) __swab16(val)
+#define SWAPL32(val) __swab32(val)
+#define SWAPL64(val) __swab64(val)
+#else
+#define SWAPL16(val) (val)
+#define SWAPL32(val) (val)
+#define SWAPL64(val) (val)
+#endif
 
 char magic1[] = {0x01, 0x51, 0x43, 0x4f, 0x4d, 0x20, 0x68, 0x69,
 		 0x67, 0x68, 0x20, 0x73, 0x70, 0x65, 0x65, 0x64, 0x20, 
@@ -64,7 +115,7 @@ char magic8[] = {0x29, 0xff, 0xff};
  * Add the implicit x^16, and you have the standard CRC-CCITT.
  */
 
-unsigned short const crc_ccitt_table[256] = {
+uint16_t const crc_ccitt_table[256] = {
 	0x0000, 0x1189, 0x2312, 0x329b, 0x4624, 0x57ad, 0x6536, 0x74bf,
 	0x8c48, 0x9dc1, 0xaf5a, 0xbed3, 0xca6c, 0xdbe5, 0xe97e, 0xf8f7,
 	0x1081, 0x0108, 0x3393, 0x221a, 0x56a5, 0x472c, 0x75b7, 0x643e,
@@ -99,7 +150,7 @@ unsigned short const crc_ccitt_table[256] = {
 	0x7bc7, 0x6a4e, 0x58d5, 0x495c, 0x3de3, 0x2c6a, 0x1ef1, 0x0f78
 };
 
-unsigned short crc_ccitt_byte(unsigned short crc, const char c)
+uint16_t crc_ccitt_byte(uint16_t crc, const char c)
 {
         return (crc >> 8) ^ crc_ccitt_table[(crc ^ c) & 0xff];
 }
@@ -110,7 +161,7 @@ unsigned short crc_ccitt_byte(unsigned short crc, const char c)
  *	@buffer: data pointer
  *	@len: number of bytes in the buffer
  */
-unsigned short crc_ccitt(short crc, char const *buffer, size_t len)
+uint16_t crc_ccitt(int16_t crc, char const *buffer, size_t len)
 {
 	while (len--)
 		crc = crc_ccitt_byte(crc, *buffer++);
@@ -175,14 +226,14 @@ int main(int argc, char **argv) {
 	}
 
 	fstat(fwfd, &file_data);
-	*(int *)&magic2[2] = file_data.st_size - 8;
-	*(int *)&magic3[7] = file_data.st_size - 8;
-	*(short *)&magic1[sizeof(magic1)-2] =
-		~crc_ccitt(0xffff, magic1, sizeof(magic1)-2);
-	*(short *)&magic2[sizeof(magic2)-2] =
-		~crc_ccitt(0xffff, magic2, sizeof(magic2)-2);
-	*(short *)&magic3[sizeof(magic3)-2] =
-		~crc_ccitt(0xffff, magic3, sizeof(magic3)-2);
+	*(int32_t *)&magic2[2] = SWAPL32(file_data.st_size - 8);
+	*(int32_t *)&magic3[7] = SWAPL32(file_data.st_size - 8);
+	*(int16_t *)&magic1[sizeof(magic1)-2] =
+		SWAPL16(~crc_ccitt(0xffff, magic1, sizeof(magic1)-2));
+	*(int16_t *)&magic2[sizeof(magic2)-2] =
+		SWAPL16(~crc_ccitt(0xffff, magic2, sizeof(magic2)-2));
+	*(int16_t *)&magic3[sizeof(magic3)-2] =
+		SWAPL16(~crc_ccitt(0xffff, magic3, sizeof(magic3)-2));
 
 	tcgetattr (serialfd, &terminal_data);
 	cfmakeraw (&terminal_data);
@@ -200,9 +251,9 @@ int main(int argc, char **argv) {
 
 	while (1) {
 		len = read (fwfd, fwdata, 1024*1024);
-		if (len == 1024*1024)
+		if (len == 1024*1024) {
 			write (serialfd, fwdata, 1024*1024);
-		else {
+		} else {
 			write (serialfd, fwdata, len-8);
 			break;
 		}
@@ -218,13 +269,13 @@ int main(int argc, char **argv) {
 	}
 
 	fstat(fwfd, &file_data);
-	*(int *)&magic4[2] = file_data.st_size;
-	*(int *)&magic5[7] = file_data.st_size;
+	*(int32_t *)&magic4[2] = SWAPL32(file_data.st_size);
+	*(int32_t *)&magic5[7] = SWAPL32(file_data.st_size);
 
-	*(short *)&magic4[sizeof(magic4)-2] =
-		~crc_ccitt(0xffff, magic4, sizeof(magic4)-2);
-	*(short *)&magic5[sizeof(magic5)-2] =
-		~crc_ccitt(0xffff, magic5, sizeof(magic5)-2);
+	*(int16_t *)&magic4[sizeof(magic4)-2] =
+		SWAPL16(~crc_ccitt(0xffff, magic4, sizeof(magic4)-2));
+	*(int16_t *)&magic5[sizeof(magic5)-2] =
+		SWAPL16(~crc_ccitt(0xffff, magic5, sizeof(magic5)-2));
 
 	write (serialfd, "\x7e", 1);
 	write (serialfd, magic4, sizeof(magic4));
@@ -234,9 +285,9 @@ int main(int argc, char **argv) {
 
 	while (1) {
 		len = read (fwfd, fwdata, 1024*1024);
-		if (len == 1024*1024)
+		if (len == 1024*1024) {
 			write (serialfd, fwdata, 1024*1024);
-		else {
+		} else {
 			write (serialfd, fwdata, len);
 			break;
 		}
@@ -256,13 +307,13 @@ int main(int argc, char **argv) {
 		}
 
 		fstat(fwfd, &file_data);
-		*(int *)&magic6[2] = file_data.st_size;
-		*(int *)&magic7[7] = file_data.st_size;
+		*(int32_t *)&magic6[2] = SWAPL32(file_data.st_size);
+		*(int32_t *)&magic7[7] = SWAPL32(file_data.st_size);
 
-		*(short *)&magic6[sizeof(magic6)-2] =
-			~crc_ccitt(0xffff, magic6, sizeof(magic6)-2);
-		*(short *)&magic7[sizeof(magic7)-2] =
-			~crc_ccitt(0xffff, magic7, sizeof(magic7)-2);
+		*(int16_t *)&magic6[sizeof(magic6)-2] =
+			SWAPL16(~crc_ccitt(0xffff, magic6, sizeof(magic6)-2));
+		*(int16_t *)&magic7[sizeof(magic7)-2] =
+			SWAPL16(~crc_ccitt(0xffff, magic7, sizeof(magic7)-2));
 
 		write (serialfd, "\x7e", 1);
 		write (serialfd, magic6, sizeof(magic6));
@@ -272,9 +323,9 @@ int main(int argc, char **argv) {
 
 		while (1) {
 			len = read (fwfd, fwdata, 1024*1024);
-			if (len == 1024*1024)
+			if (len == 1024*1024) {
 				write (serialfd, fwdata, 1024*1024);
-			else {
+			} else {
 				write (serialfd, fwdata, len);
 				break;
 			}
@@ -282,8 +333,8 @@ int main(int argc, char **argv) {
 		}
 	}
 
-	*(short *)&magic8[sizeof(magic8)-2] =
-		~crc_ccitt(0xffff, magic8, sizeof(magic8)-2);
+	*(int16_t *)&magic8[sizeof(magic8)-2] =
+		SWAPL16(~crc_ccitt(0xffff, magic8, sizeof(magic8)-2));
 
 	write (serialfd, "\x7e", 1);
 	write (serialfd, magic8, sizeof(magic8));
