@@ -24,6 +24,11 @@
 
 /* 2013-11-06 <joykicer@gmail.com>
  * Fix make magic words error when build in big-endian system
+ *
+ * 2014-01-22 <joykicer@gmail.com>
+ * Send firmware with 256*1024 bytes per package
+ * Read and check device response after send cmd
+ * Use 0x7d as an escape character encode package
  */
 
 #include <stdio.h>
@@ -35,6 +40,7 @@
 #include <unistd.h>
 #include <malloc.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 #if defined(BYTE_ORDER) && !defined(__BYTE_ORDER)
 #define __LITTLE_ENDIAN LITTLE_ENDIAN
@@ -172,6 +178,79 @@ void usage (char **argv) {
 	printf ("usage: %s [-2000] serial_device firmware_dir\n", argv[0]);
 }
 
+#define DATA_ENCODE		1	/* add 0x7e head/tail, do encode */
+#define DATA_NOENCODE	0	/* no 0x7e head/tail, no encode */
+int qdl_server_send_request(int fd, const char *data, int len, char flag) {
+	int i, cnt;
+	char buff[64];
+
+	if(data == NULL) return -1;
+	if(len < 3) return -1;
+
+	cnt = len;
+	memcpy(buff, data, len);
+
+	*(int16_t *)&buff[len-2] = SWAPL16(~crc_ccitt(0xffff, data, len-2)); /* crc */
+
+	if(flag == DATA_ENCODE) { /* do transposition, similar to PPP protocol */
+		for(i=0; i<len; i++) {
+			switch(buff[i]) {
+				case 0x7e:
+					buff[i] = 0x7d;
+					memmove(buff+i+2, buff+i+1, len-i-1);
+					buff[i+1] = 0x5e;
+					cnt++;
+					break;
+
+				case 0x7d:
+					buff[i] = 0x7d;
+					memmove(buff+i+2, buff+i+1, len-i-1);
+					buff[i+1] = 0x5d;
+					cnt++;
+					break;
+			}
+		}
+	}
+
+	if(flag == DATA_ENCODE) write(fd, "\x7e", 1);
+	write(fd, buff, cnt);
+	if(flag == DATA_ENCODE) write(fd, "\x7e", 1);
+
+	return 0;
+}
+
+static void die(const char *err) {
+	fprintf(stderr, "[QDL ERROR]: %s\n", err);
+}
+
+int qdl_server_wait_response(int fd, char code) {
+	int i;
+	int len;
+	char buff[64];
+
+	len = read(fd, buff, sizeof(buff));
+
+	if(len < 4) { /* 0x7e crc1 crc2 0x7e */
+		die("Invalid Length");
+		return 1;
+	}
+
+	if((buff[0] != 0x7e) || (buff[len-1] != 0x7e)) {
+		die("Invalid Package");
+		return 2;
+	}
+
+	if(buff[1] != code) {
+		die("Invalid response Code");
+		return 3;
+	}
+
+	/* check crc? */
+
+	return 0;
+}
+
+#define FW_SIZE_PER_PACKAGE		(256*1024)
 int main(int argc, char **argv) {	
 	int serialfd;
 	int fwfd;
@@ -180,7 +259,7 @@ int main(int argc, char **argv) {
 	int gobi2000 = 0;
 	struct termios terminal_data;
 	struct stat file_data;
-	char *fwdata = malloc(1024*1024);
+	char *fwdata = malloc(FW_SIZE_PER_PACKAGE);
 
 	if (argc < 3 || argc > 4) {
 		usage(argv);
@@ -228,37 +307,30 @@ int main(int argc, char **argv) {
 	fstat(fwfd, &file_data);
 	*(int32_t *)&magic2[2] = SWAPL32(file_data.st_size - 8);
 	*(int32_t *)&magic3[7] = SWAPL32(file_data.st_size - 8);
-	*(int16_t *)&magic1[sizeof(magic1)-2] =
-		SWAPL16(~crc_ccitt(0xffff, magic1, sizeof(magic1)-2));
-	*(int16_t *)&magic2[sizeof(magic2)-2] =
-		SWAPL16(~crc_ccitt(0xffff, magic2, sizeof(magic2)-2));
-	*(int16_t *)&magic3[sizeof(magic3)-2] =
-		SWAPL16(~crc_ccitt(0xffff, magic3, sizeof(magic3)-2));
 
 	tcgetattr (serialfd, &terminal_data);
 	cfmakeraw (&terminal_data);
 	tcsetattr (serialfd, TCSANOW, &terminal_data);
 
-	write (serialfd, "\x7e", 1);
-	write (serialfd, magic1, sizeof(magic1));
-	write (serialfd, "\x7e", 1);
+	qdl_server_send_request(serialfd, magic1, sizeof(magic1), DATA_ENCODE);
+	qdl_server_wait_response(serialfd, 0x02);
 
-	write (serialfd, "\x7e", 1);
-	write (serialfd, magic2, sizeof(magic2));
-	write (serialfd, "\x7e", 1);
-
-	write (serialfd, magic3, sizeof(magic3));
+	qdl_server_send_request(serialfd, magic2, sizeof(magic2), DATA_ENCODE);
+	qdl_server_wait_response(serialfd, 0x26);
+	qdl_server_send_request(serialfd, magic3, sizeof(magic3), DATA_NOENCODE);
 
 	while (1) {
-		len = read (fwfd, fwdata, 1024*1024);
-		if (len == 1024*1024) {
-			write (serialfd, fwdata, 1024*1024);
-		} else {
+		len = read (fwfd, fwdata, FW_SIZE_PER_PACKAGE);
+		if (len == FW_SIZE_PER_PACKAGE)
+			write (serialfd, fwdata, FW_SIZE_PER_PACKAGE);
+		else {
 			write (serialfd, fwdata, len-8);
 			break;
 		}
 		write (serialfd, fwdata, 0);
 	}
+	qdl_server_wait_response(serialfd, 0x28);
+	printf("QDL amss.mbn finish\n");
 
 	fwfd = open("apps.mbn", O_RDONLY);
 
@@ -272,27 +344,22 @@ int main(int argc, char **argv) {
 	*(int32_t *)&magic4[2] = SWAPL32(file_data.st_size);
 	*(int32_t *)&magic5[7] = SWAPL32(file_data.st_size);
 
-	*(int16_t *)&magic4[sizeof(magic4)-2] =
-		SWAPL16(~crc_ccitt(0xffff, magic4, sizeof(magic4)-2));
-	*(int16_t *)&magic5[sizeof(magic5)-2] =
-		SWAPL16(~crc_ccitt(0xffff, magic5, sizeof(magic5)-2));
-
-	write (serialfd, "\x7e", 1);
-	write (serialfd, magic4, sizeof(magic4));
-	write (serialfd, "\x7e", 1);
-
-	write (serialfd, magic5, sizeof(magic5));
+	qdl_server_send_request(serialfd, magic4, sizeof(magic4), DATA_ENCODE);
+	qdl_server_wait_response(serialfd, 0x26);
+	qdl_server_send_request(serialfd, magic5, sizeof(magic5), DATA_NOENCODE);
 
 	while (1) {
-		len = read (fwfd, fwdata, 1024*1024);
-		if (len == 1024*1024) {
-			write (serialfd, fwdata, 1024*1024);
-		} else {
+		len = read (fwfd, fwdata, FW_SIZE_PER_PACKAGE);
+		if (len == FW_SIZE_PER_PACKAGE)
+			write (serialfd, fwdata, FW_SIZE_PER_PACKAGE);
+		else {
 			write (serialfd, fwdata, len);
 			break;
 		}
 		write (serialfd, fwdata, 0);
 	}
+	qdl_server_wait_response(serialfd, 0x28);
+	printf("QDL apps.mbn finish\n");
 
 	if (gobi2000) {
 		fwfd = open("UQCN.mbn", O_RDONLY);
@@ -310,35 +377,26 @@ int main(int argc, char **argv) {
 		*(int32_t *)&magic6[2] = SWAPL32(file_data.st_size);
 		*(int32_t *)&magic7[7] = SWAPL32(file_data.st_size);
 
-		*(int16_t *)&magic6[sizeof(magic6)-2] =
-			SWAPL16(~crc_ccitt(0xffff, magic6, sizeof(magic6)-2));
-		*(int16_t *)&magic7[sizeof(magic7)-2] =
-			SWAPL16(~crc_ccitt(0xffff, magic7, sizeof(magic7)-2));
-
-		write (serialfd, "\x7e", 1);
-		write (serialfd, magic6, sizeof(magic6));
-		write (serialfd, "\x7e", 1);
-
-		write (serialfd, magic7, sizeof(magic7));
+		qdl_server_send_request(serialfd, magic6, sizeof(magic6), DATA_ENCODE);
+		qdl_server_wait_response(serialfd, 0x26);
+		qdl_server_send_request(serialfd, magic7, sizeof(magic7), DATA_NOENCODE);
 
 		while (1) {
-			len = read (fwfd, fwdata, 1024*1024);
-			if (len == 1024*1024) {
-				write (serialfd, fwdata, 1024*1024);
-			} else {
+			len = read (fwfd, fwdata, FW_SIZE_PER_PACKAGE);
+			if (len == FW_SIZE_PER_PACKAGE)
+				write (serialfd, fwdata, FW_SIZE_PER_PACKAGE);
+			else {
 				write (serialfd, fwdata, len);
 				break;
 			}
 			write (serialfd, fwdata, 0);
 		}
+		qdl_server_wait_response(serialfd, 0x28);
+		printf("QDL uqcn.mbn finish\n");
 	}
 
-	*(int16_t *)&magic8[sizeof(magic8)-2] =
-		SWAPL16(~crc_ccitt(0xffff, magic8, sizeof(magic8)-2));
-
-	write (serialfd, "\x7e", 1);
-	write (serialfd, magic8, sizeof(magic8));
-	write (serialfd, "\x7e", 1);
+	qdl_server_send_request(serialfd, magic8, sizeof(magic8), DATA_ENCODE);
+	printf("QDL success\n");
 
 	return 0;
 }
