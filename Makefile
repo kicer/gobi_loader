@@ -16,8 +16,8 @@ uninstall:
 	-rm $(prefix)/lib/udev/rules.d/60-gobi.rules
 
 clean:
-	-rm gobi_loader
-	-rm *~
+	-rm -f gobi_loader
+	-rm -f *~
 
 dist:
 	mkdir gobi_loader-$(VERSION)
