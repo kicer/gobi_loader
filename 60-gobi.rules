@@ -1,0 +1,33 @@
+# udev rules for firmware loading on qualcomm gobi devices
+
+ACTION=="add", SUBSYSTEM=="tty" KERNEL=="ttyUSB*" GOTO="gobi_rules"
+
+GOTO="gobi_rules_end"
+
+LABEL="gobi_rules"
+ATTRS{idVendor}=="05c6", ATTRS{idProduct}=="9211", RUN+="gobi_loader $env{DEVNAME} /lib/firmware/gobi"
+ATTRS{idVendor}=="03f0", ATTRS{idProduct}=="201d", RUN+="gobi_loader $env{DEVNAME} /lib/firmware/gobi"
+ATTRS{idVendor}=="04da", ATTRS{idProduct}=="250c", RUN+="gobi_loader $env{DEVNAME} /lib/firmware/gobi"
+ATTRS{idVendor}=="413c", ATTRS{idProduct}=="8171", RUN+="gobi_loader $env{DEVNAME} /lib/firmware/gobi"
+ATTRS{idVendor}=="1410", ATTRS{idProduct}=="a008", RUN+="gobi_loader $env{DEVNAME} /lib/firmware/gobi"
+ATTRS{idVendor}=="0b05", ATTRS{idProduct}=="1774", RUN+="gobi_loader $env{DEVNAME} /lib/firmware/gobi"
+ATTRS{idVendor}=="19d2", ATTRS{idProduct}=="fff2", RUN+="gobi_loader $env{DEVNAME} /lib/firmware/gobi"
+ATTRS{idVendor}=="1557", ATTRS{idProduct}=="0a80", RUN+="gobi_loader $env{DEVNAME} /lib/firmware/gobi"
+ATTRS{idVendor}=="05c6", ATTRS{idProduct}=="9008", RUN+="gobi_loader $env{DEVNAME} /lib/firmware/gobi"
+ATTRS{idVendor}=="05c6", ATTRS{idProduct}=="9201", RUN+="gobi_loader $env{DEVNAME} /lib/firmware/gobi"
+ATTRS{idVendor}=="05c6", ATTRS{idProduct}=="9221", RUN+="gobi_loader $env{DEVNAME} /lib/firmware/gobi"
+ATTRS{idVendor}=="05c6", ATTRS{idProduct}=="9231", RUN+="gobi_loader $env{DEVNAME} /lib/firmware/gobi"
+ATTRS{idVendor}=="1f45", ATTRS{idProduct}=="0001", RUN+="gobi_loader $env{DEVNAME} /lib/firmware/gobi"
+ATTRS{idVendor}=="16d8", ATTRS{idProduct}=="8001", RUN+="gobi_loader -2000 $env{DEVNAME} /lib/firmware/gobi"
+ATTRS{idVendor}=="1199", ATTRS{idProduct}=="9000", RUN+="gobi_loader -2000 $env{DEVNAME} /lib/firmware/gobi"
+ATTRS{idVendor}=="03f0", ATTRS{idProduct}=="241d", RUN+="gobi_loader -2000 $env{DEVNAME} /lib/firmware/gobi"
+ATTRS{idVendor}=="05c6", ATTRS{idProduct}=="9204", RUN+="gobi_loader -2000 $env{DEVNAME} /lib/firmware/gobi"
+ATTRS{idVendor}=="05c6", ATTRS{idProduct}=="9214", RUN+="gobi_loader -2000 $env{DEVNAME} /lib/firmware/gobi"
+ATTRS{idVendor}=="05c6", ATTRS{idProduct}=="9224", RUN+="gobi_loader -2000 $env{DEVNAME} /lib/firmware/gobi"
+ATTRS{idVendor}=="05c6", ATTRS{idProduct}=="9234", RUN+="gobi_loader -2000 $env{DEVNAME} /lib/firmware/gobi"
+ATTRS{idVendor}=="05c6", ATTRS{idProduct}=="9244", RUN+="gobi_loader -2000 $env{DEVNAME} /lib/firmware/gobi"
+ATTRS{idVendor}=="05c6", ATTRS{idProduct}=="9264", RUN+="gobi_loader -2000 $env{DEVNAME} /lib/firmware/gobi"
+ATTRS{idVendor}=="05c6", ATTRS{idProduct}=="9274", RUN+="gobi_loader -2000 $env{DEVNAME} /lib/firmware/gobi"
+ATTRS{idVendor}=="413c", ATTRS{idProduct}=="8185", RUN+="gobi_loader -2000 $env{DEVNAME} /lib/firmware/gobi"
+
+LABEL="gobi_rules_end"

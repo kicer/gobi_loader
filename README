@@ -1,0 +1,62 @@
+gobi_loader
+
+gobi_loader is a firmware loader for Qualcomm Gobi USB chipsets. These devices
+appear in an uninitialised state when power is applied and require firmware
+to be loaded before they can be used as modems. gobi_loader adds a udev rule
+that will trigger loading of the firmware and make the modem usable.
+
+Installing:
+
+make; make install
+
+You also need the qcserial driver. This is included in kernels 2.6.30 and
+later. Ensure that it has the IDs for your device. If not, add a line like
+
+{USB_DEVICE(0x1234, 0x5678)},
+
+to the id_table structure in drivers/usb/serial/qcserial.c and
+rebuilt. This device is the firmware loading device and is not usable
+as a modem. When loaded, qcserial should create a /dev/ttyUSB
+device. Check that /etc/udev/rules.d/60-gobi.rules has an entry for your device
+- if not, copy one of the existing lines and change the vendor and product IDs.
+Note that a device line is only needed for the firmware loading ID, not the
+modem ID.
+
+Now you need the modem firmware. This can be obtained from a Windows
+install - alternatively it may be possible to download from your
+vendor's site and extracted with wine. You need the amss.mbn and
+apps.mbn files corresponding to your mobile provider. For Gobi 2000
+devices you also need UQCN.mbn. As yet, I don't have a good mapping
+between devices and the appropriate firmware, so you'll need to figure
+this out yourself.  Remember that some mobile providers use CDMA and
+some use GSM - the CDMA firmware will typically be a smaller file than
+the GSM firmware (approximately 5MB for CDMA firmware, approximately
+9MB for GSM firmware). On my install, these files could be found in a
+QDLService/Packages directory.
+
+Please don't ask me for firmware. It's copyright Qualcomm and I can't
+redistribute it.
+
+Copy the appropriate firmware into /lib/firmware/gobi. Unload and
+reload the qcserial driver or reboot your machine. Assuming you
+installed the application and rules correctly, and assuming that
+qcserial and the rules file both contain your modem devices, your
+firmware will now load. The firmware loading device will now detach
+from your system and reattach with a different ID. If you had to add
+the firmware loading device to qcserial.c then you will probably also
+need to add the modem device. However, the modem device does not need
+to be added to the udev rules file.
+
+A /dev/ttyUSB device will now exist for your modem. Recent versions of
+network-manager should automatically pick it up - older versions (and
+any other modem management software) may need more assistence.
+
+Author:
+
+This code was writte by Matthew Garrett <mjg@redhat.com> and is
+released under the terms of version 2 of the GNU General Public
+License. It is based on code written by Alexander Shumakovitch and
+contains crc generation code from the Linux kernel. Gobi 2000 support
+was provided by Anssi Hannula. The code was written by examining USB
+traffic dumps under Windows - the Qualcomm drivers or firmware have
+not been reverse engineered or disassembled in any way.
