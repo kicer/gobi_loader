@@ -1,0 +1,51 @@
+#!/bin/sh /etc/rc.common
+# Copyright (C) 2009-2014 OpenWrt.org
+
+START=96
+
+PROG=/usr/bin/gobi_loader
+
+error() {
+	echo "${initscript}:" "$@" 1>&2
+}
+
+start_instance() {
+	local s="$1"
+
+	config_get_bool enabled "$1" 'enabled' 0
+	[ $enabled -eq 0 ] && return
+
+	config_get device "$s" 'device'
+	if [ -z "$device" ]; then
+		error "in section '$s' option device is missing"
+		return 1
+	elif [ ! -c "$device" ]; then
+		error "device '$device' does not exist"
+		return 1
+	fi
+
+	config_get firmware "$s" 'firmware'
+	if [ -z "$firmware" ]; then
+		error "in section '$s' option firmware is missing"
+		return 1
+	elif [ ! -d "$firmware" ]; then
+		error "firmware '$firmware' does not exist"
+		return 1
+	fi
+	
+	config_get type "$s" 'type'
+	
+	local type_arg
+	if [ "x$type" = 'xgobi2000' ]; then
+		type_arg='-2000'
+	else
+		type_arg=''
+	fi
+
+	"$PROG" "$type_arg" "$device" "$firmware"
+}
+
+start() {
+	config_load 'gobi-loader'
+	config_foreach start_instance 'gobi-loader'
+}
