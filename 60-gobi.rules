@@ -21,6 +21,7 @@ ATTRS{idVendor}=="1f45", ATTRS{idProduct}=="0001", RUN+="gobi_loader $env{DEVNAM
 ATTRS{idVendor}=="16d8", ATTRS{idProduct}=="8001", RUN+="gobi_loader -2000 $env{DEVNAME} /lib/firmware/gobi"
 ATTRS{idVendor}=="1199", ATTRS{idProduct}=="9000", RUN+="gobi_loader -2000 $env{DEVNAME} /lib/firmware/gobi"
 ATTRS{idVendor}=="03f0", ATTRS{idProduct}=="241d", RUN+="gobi_loader -2000 $env{DEVNAME} /lib/firmware/gobi"
+ATTRS{idVendor}=="04da", ATTRS{idProduct}=="250e", RUN+="gobi_loader -2000 $env{DEVNAME} /lib/firmware/gobi"
 ATTRS{idVendor}=="05c6", ATTRS{idProduct}=="9204", RUN+="gobi_loader -2000 $env{DEVNAME} /lib/firmware/gobi"
 ATTRS{idVendor}=="05c6", ATTRS{idProduct}=="9214", RUN+="gobi_loader -2000 $env{DEVNAME} /lib/firmware/gobi"
 ATTRS{idVendor}=="05c6", ATTRS{idProduct}=="9224", RUN+="gobi_loader -2000 $env{DEVNAME} /lib/firmware/gobi"
