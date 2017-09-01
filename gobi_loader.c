@@ -38,7 +38,6 @@
 #include <fcntl.h>
 #include <termios.h>
 #include <unistd.h>
-#include <malloc.h>
 #include <stdint.h>
 #include <stdlib.h>
 
